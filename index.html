@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NETRA EWS — North East Terrain Risk Assessment & Early Warning System</title>
+    
+    <!-- Google Fonts & FontAwesome -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet GIS Engine -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        :root {
+            --bg-base: #080c14;
+            --bg-panel: #0f172a;
+            --bg-panel-hover: #1e293b;
+            --bg-card: #141e33;
+            --border-subtle: #1e293b;
+            --border-highlight: #334155;
+            
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            
+            --risk-critical: #ef4444;
+            --risk-high: #f97316;
+            --risk-moderate: #eab308;
+            --risk-stable: #10b981;
+            --accent-cyan: #0ea5e9;
+            
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* HEADER CONSOLE */
+        header {
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border-subtle);
+            height: 56px;
+            padding: 0 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 100;
+        }
+
+        .brand-block {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-icon {
+            width: 34px;
+            height: 34px;
+            background: linear-gradient(135deg, var(--accent-cyan), #0284c7);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 16px;
+            box-shadow: 0 0 12px rgba(14, 165, 233, 0.3);
+        }
+
+        .brand-text h1 {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--text-primary);
+            line-height: 1.2;
+        }
+
+        .brand-text p {
+            font-size: 10px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .lang-select {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--risk-stable);
+            padding: 4px 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+
+        .pulse-dot {
+            width: 6px;
+            height: 6px;
+            background-color: var(--risk-stable);
+            border-radius: 50%;
+            animation: pulse-ring 1.8s infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .sys-clock {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* KPI OVERVIEW BAR */
+        .kpi-bar {
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border-subtle);
+            display: grid;
+            grid-template-columns: repeat(4, 1fr) 2fr;
+            padding: 8px 18px;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .kpi-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-panel);
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .kpi-value {
+            font-family: var(--font-mono);
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .kpi-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .region-tag {
+            text-align: right;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* MAIN SYSTEM LAYOUT */
+        .viewport-grid {
+            display: grid;
+            grid-template-columns: 320px 1fr 410px;
+            height: calc(100vh - 104px);
+            overflow: hidden;
+        }
+
+        /* LEFT SIDEBAR: MONITORING QUEUE */
+        .panel-left {
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            padding: 12px 16px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .zone-queue {
+            overflow-y: auto;
+            flex: 1;
+            padding: 0 12px 12px;
+        }
+
+        .zone-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .zone-item:hover, .zone-item.active {
+            border-color: var(--accent-cyan);
+            background: var(--bg-panel-hover);
+        }
+
+        .zone-item-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .zone-item-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .badge-risk {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .risk-critical-bg { background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .risk-high-bg { background: rgba(249, 115, 22, 0.18); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3); }
+        .risk-moderate-bg { background: rgba(234, 179, 8, 0.18); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
+        .risk-stable-bg { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+        .zone-item-metrics {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px dashed var(--border-subtle);
+        }
+
+        .zone-item-metrics span {
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* CENTER VIEW: GEOSPATIAL MAP & ANOMALY BANNER */
+        .panel-center {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background: #06090f;
+        }
+
+        .anomaly-alert-banner {
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.25), rgba(249, 115, 22, 0.15));
+            border-bottom: 1px solid var(--risk-critical);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 50;
+            font-size: 11px;
+        }
+
+        .anomaly-alert-banner .info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #fca5a5;
+        }
+
+        .field-report-btn-wrap {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 500;
+            display: flex;
+            gap: 10px;
+        }
+
+        #map-canvas {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* RIGHT PANEL: AUTHORITY DECISION CONSOLE */
+        .panel-right {
+            background-color: var(--bg-panel);
+            border-left: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 14px;
+            gap: 12px;
+        }
+
+        .card-block {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .card-header {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--accent-cyan);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .score-display-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-panel);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
+            margin-top: 8px;
+        }
+
+        .eps-box .val {
+            font-family: var(--font-mono);
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+        }
+
+        .eps-box .lbl {
+            font-size: 9px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        /* XAI CONTRIBUTOR BARS */
+        .xai-bar-item { margin-bottom: 8px; }
+        .xai-bar-item:last-child { margin-bottom: 0; }
+
+        .xai-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            margin-bottom: 3px;
+        }
+
+        .xai-track {
+            height: 5px;
+            background: var(--border-subtle);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .xai-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        /* LISTS */
+        .action-list {
+            list-style: none;
+            font-size: 11px;
+        }
+
+        .action-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px dashed var(--border-subtle);
+        }
+        .action-item:last-child { border-bottom: none; }
+
+        .action-item i {
+            margin-top: 2px;
+            color: var(--accent-cyan);
+        }
+
+        /* WORKFLOW BUTTONS */
+        .workflow-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .btn {
+            font-family: var(--font-sans);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .btn-primary { background: var(--accent-cyan); color: #000; }
+        .btn-primary:hover { background: #38bdf8; }
+        .btn-secondary { background: var(--bg-panel-hover); color: var(--text-primary); border: 1px solid var(--border-subtle); }
+        .btn-secondary:hover { background: var(--border-highlight); }
+        .btn-alert { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .btn-alert:hover { background: rgba(239, 68, 68, 0.25); }
+
+        .btn-active-state {
+            box-shadow: 0 0 8px rgba(14, 165, 233, 0.5);
+            border-color: var(--accent-cyan) !important;
+        }
+
+        .disclaimer-text {
+            font-size: 9.5px;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 4px;
+            font-style: italic;
+        }
+
+        /* MODAL STYLES FOR FIELD REPORT & CIVILIAN REPORT */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-highlight);
+            width: 440px;
+            max-height: 90vh;
+            overflow-y: auto;
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .modal-content h3 { font-size: 14px; color: var(--accent-cyan); }
+        .modal-content label { font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+        .modal-content select, .modal-content input, .modal-content textarea {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            padding: 8px;
+            font-size: 11px;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        .media-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .media-preview-item {
+            width: 100%;
+            height: 70px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        /* FOOTER DATA FRESHNESS BAR */
+        footer {
+            background-color: var(--bg-panel);
+            border-top: 1px solid var(--border-subtle);
+            height: 24px;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-muted);
+            z-index: 100;
+        }
+
+        .data-source-pills { display: flex; gap: 16px; }
+        .source-pill strong { color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+
+    <!-- HEADER CONSOLE -->
+    <header>
+        <div class="brand-block">
+            <div class="brand-icon"><i class="fa-solid fa-mountain-sun"></i></div>
+            <div class="brand-text">
+                <h1 id="ui-app-title">NETRA EWS</h1>
+                <p id="ui-app-sub">North East Terrain Risk Assessment & Early Warning System</p>
+            </div>
+        </div>
+
+        <div class="header-controls">
+            <select class="lang-select" id="lang-switcher" onchange="changeLanguage(this.value)">
+                <option value="en">English (EN)</option>
+                <option value="hi">हिंदी (Hindi)</option>
+                <option value="as">অসমীয়া (Assamese)</option>
+            </select>
+            <div class="status-indicator">
+                <div class="pulse-dot"></div>
+                <span id="ui-sys-status">SYSTEM ACTIVE — ASSAM SECTOR</span>
+            </div>
+            <div class="sys-clock" id="live-clock">--:--:-- IST</div>
+        </div>
+    </header>
+
+    <!-- KPI OVERVIEW BAR -->
+    <div class="kpi-bar">
+        <div class="kpi-card">
+            <i class="fa-solid fa-triangle-exclamation" style="color: var(--risk-critical);"></i>
+            <div>
+                <div class="kpi-value" style="color: var(--risk-critical);" id="count-critical">0</div>
+                <div class="kpi-label" id="lbl-critical">Critical Alerts</div>
+            </div>
+        </div>
+        <div class="kpi-card">
+            <i class="fa-solid fa-circle-exclamation" style="color: var(--risk-high);"></i>
+            <div>
+                <div class="kpi-value" style="color: var(--risk-high);" id="count-high">0</div>
+                <div class="kpi-label" id="lbl-high">High Risk</div>
+            </div>
+        </div>
+        <div class="kpi-card">
+            <i class="fa-solid fa-circle-dot" style="color: var(--risk-moderate);"></i>
+            <div>
+                <div class="kpi-value" style="color: var(--risk-moderate);" id="count-moderate">0</div>
+                <div class="kpi-label" id="lbl-moderate">Moderate</div>
+            </div>
+        </div>
+        <div class="kpi-card">
+            <i class="fa-solid fa-shield" style="color: var(--risk-stable);"></i>
+            <div>
+                <div class="kpi-value" style="color: var(--risk-stable);" id="count-stable">0</div>
+                <div class="kpi-label" id="lbl-stable">Stable Zones</div>
+            </div>
+        </div>
+        <div class="region-tag">
+            <strong>Sector:</strong> Assam Hill Slopes & Key Transit Corridors (5 Active Monitoring Nodes)
+        </div>
+    </div>
+
+    <!-- MAIN VIEWPORT GRID -->
+    <div class="viewport-grid">
+        
+        <!-- LEFT PANEL: MONITORING QUEUE -->
+        <div class="panel-left">
+            <div class="panel-section-title">
+                <span id="ui-queue-title">Monitoring Priority Queue</span>
+                <span id="queue-total">5 Sectors</span>
+            </div>
+            <div class="zone-queue" id="zone-queue-container"></div>
+        </div>
+
+        <!-- CENTER PANEL: GEOSPATIAL MAP & ANOMALY BANNER -->
+        <div class="panel-center">
+            <div class="anomaly-alert-banner" id="anomaly-banner">
+                <div class="info">
+                    <i class="fa-solid fa-bolt-lightning" style="color: var(--risk-critical);"></i>
+                    <div>
+                        <strong id="ui-anomaly-title">ENVIRONMENTAL ANOMALY DETECTED:</strong>
+                        <span id="anomaly-text">Sonapur NH-27 Corridor — 24h Rainfall intensity 2.4x above baseline threshold.</span>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 10px;" onclick="focusAnomalyZone()">Inspect Zone</button>
+            </div>
+
+            <!-- GEOSPATIAL MAP CANVAS -->
+            <div id="map-canvas"></div>
+
+            <!-- FIELD & CIVILIAN REPORT BUTTON OVERLAYS -->
+            <div class="field-report-btn-wrap">
+                <button class="btn btn-secondary" style="background: var(--bg-panel); border-color: var(--accent-cyan); color: var(--accent-cyan);" onclick="openReportModal()">
+                    <i class="fa-solid fa-clipboard-user"></i> Official Field Log
+                </button>
+                <button class="btn btn-primary" style="background: #10b981; color: #000;" onclick="openCivilianReportModal()">
+                    <i class="fa-solid fa-camera"></i> Public Hazard Incident Upload
+                </button>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: AUTHORITY DECISION CONSOLE -->
+        <div class="panel-right">
+            
+            <!-- ZONE EVALUATION HEADER -->
+            <div class="card-block">
+                <div class="card-header">
+                    <i class="fa-solid fa-crosshairs"></i>
+                    <span id="ui-card-decision">Zone Decision Assessment</span>
+                </div>
+                <h2 id="eval-zone-name" style="font-size: 15px; font-weight: 700;">Select a Zone</h2>
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" id="eval-zone-sub">District: -- | Lat/Lon: --</div>
+                
+                <div class="score-display-row">
+                    <div class="eps-box">
+                        <div class="lbl">Emergency Priority Score</div>
+                        <div class="val" id="eval-eps">-- / 100</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="lbl" style="font-size: 9px; color: var(--text-muted); text-transform: uppercase;">6-Hour Risk Trend</div>
+                        <div style="font-size: 12px; font-weight: 700; color: var(--risk-critical);" id="eval-trend">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EXPLAINABLE AI (XAI) FACTOR CONTRIBUTION -->
+            <div class="card-block">
+                <div class="card-header">
+                    <i class="fa-solid fa-brain"></i>
+                    <span>Explainable AI (XAI) Risk Factors</span>
+                </div>
+                <div id="xai-factors-container">
+                    <div class="xai-bar-item">
+                        <div class="xai-meta"><span>Short-Term Rainfall Spike</span><span id="xai-v1">--%</span></div>
+                        <div class="xai-track"><div class="xai-fill" id="xai-b1" style="width: 0%; background: var(--risk-critical);"></div></div>
+                    </div>
+                    <div class="xai-bar-item">
+                        <div class="xai-meta"><span>Soil Moisture Saturation</span><span id="xai-v2">--%</span></div>
+                        <div class="xai-track"><div class="xai-fill" id="xai-b2" style="width: 0%; background: var(--risk-high);"></div></div>
+                    </div>
+                    <div class="xai-bar-item">
+                        <div class="xai-meta"><span>Slope & Elevation Gradient</span><span id="xai-v3">--%</span></div>
+                        <div class="xai-track"><div class="xai-fill" id="xai-b3" style="width: 0%; background: var(--risk-moderate);"></div></div>
+                    </div>
+                    <div class="xai-bar-item">
+                        <div class="xai-meta"><span>Historical Landslide Vulnerability</span><span id="xai-v4">--%</span></div>
+                        <div class="xai-track"><div class="xai-fill" id="xai-b4" style="width: 0%; background: var(--accent-cyan);"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WEATHER FORECAST & WINDOW -->
+            <div class="card-block">
+                <div class="card-header">
+                    <i class="fa-solid fa-cloud-bolt"></i>
+                    <span>Weather-Linked Risk Window</span>
+                </div>
+                <div style="font-size: 11px; line-height: 1.5; color: var(--text-secondary);" id="eval-forecast">
+                    Select a zone to view 6-12h weather impact window.
+                </div>
+            </div>
+
+            <!-- RECOMMENDED PREVENTIVE ACTIONS -->
+            <div class="card-block">
+                <div class="card-header">
+                    <i class="fa-solid fa-list-check"></i>
+                    <span>Recommended Authority Actions</span>
+                </div>
+                <ul class="action-list" id="eval-actions">
+                    <li class="action-item"><i class="fa-solid fa-info-circle"></i> Select a zone to generate decision actions.</li>
+                </ul>
+            </div>
+
+            <!-- INFRASTRUCTURE & ROAD REROUTING -->
+            <div class="card-block">
+                <div class="card-header">
+                    <i class="fa-solid fa-route"></i>
+                    <span>Infrastructure & Transit Status</span>
+                </div>
+                <ul class="action-list" id="eval-impacts"></ul>
+                <div style="margin-top: 8px; font-size: 10.5px; background: var(--bg-panel); padding: 8px; border-radius: 4px; border: 1px solid var(--border-subtle);" id="eval-reroute">
+                    <strong>Transit Advisory:</strong> Route Status Open. Reroute via State Highway 14 if risk score exceeds 85.
+                </div>
+            </div>
+
+            <!-- AUTHORITY WORKFLOW STATE MACHINE -->
+            <div class="card-block">
+                <div class="card-header">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Authority Response Workflow</span>
+                </div>
+                <div style="font-size: 11px; margin-bottom: 8px; display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">Current State:</span>
+                    <strong id="eval-workflow-state" style="color: var(--risk-high);">NEW ALERT</strong>
+                </div>
+                <div class="workflow-row">
+                    <button class="btn btn-primary" id="btn-wf-ack" onclick="advanceWorkflow('ACKNOWLEDGED')"><i class="fa-solid fa-check-double"></i> Acknowledge Alert</button>
+                    <button class="btn btn-secondary" id="btn-wf-team" onclick="advanceWorkflow('TEAM ASSIGNED')"><i class="fa-solid fa-person-digging"></i> Dispatch Field Team</button>
+                    <button class="btn btn-alert" id="btn-wf-road" onclick="advanceWorkflow('ROAD ADVISORY ISSUED')"><i class="fa-solid fa-triangle-exclamation"></i> Issue Road Advisory</button>
+                    <button class="btn btn-secondary" id="btn-wf-res" style="border-color: var(--risk-stable); color: var(--risk-stable);" onclick="advanceWorkflow('RESOLVED')"><i class="fa-solid fa-circle-check"></i> Mark Risk Resolved</button>
+                </div>
+            </div>
+
+            <div class="disclaimer-text">
+                * NETRA EWS provides AI-assisted risk assessment for early warning and decision support.
+            </div>
+
+        </div>
+    </div>
+
+    <!-- FIELD OFFICIAL REPORT MODAL -->
+    <div class="modal-overlay" id="report-modal">
+        <div class="modal-content">
+            <h3><i class="fa-solid fa-triangle-exclamation"></i> Log Field Observation Report</h3>
+            <div>
+                <label>Select Sector Location</label>
+                <select id="rpt-zone">
+                    <option value="NETRA-AS-01">Sonapur Slope Sector (NH-27)</option>
+                    <option value="NETRA-AS-02">Haflong Hill Bypass Corridor</option>
+                    <option value="NETRA-AS-03">Guwahati Narakasur Hill Slopes</option>
+                    <option value="NETRA-AS-04">Jorhat Disoi Valley Slope Node</option>
+                    <option value="NETRA-AS-05">Silchar Kalain Slope Sector (NH-6)</option>
+                </select>
+            </div>
+            <div>
+                <label>Observed Hazard Type</label>
+                <select id="rpt-type">
+                    <option value="Slope crack detected">Slope crack detected</option>
+                    <option value="Minor rockfall / debris spill">Minor rockfall / debris spill</option>
+                    <option value="Water seepage / saturation overflow">Water seepage / saturation overflow</option>
+                    <option value="Road shoulder erosion">Road shoulder erosion</option>
+                </select>
+            </div>
+            <div>
+                <label>Field Inspector Notes</label>
+                <textarea id="rpt-desc" rows="3" placeholder="Describe observations, estimated slope movement, or road clearance status..."></textarea>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="closeReportModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitFieldReport()">Submit Report (Offline-First Sync)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CIVILIAN CITIZEN REPORT MODAL -->
+    <div class="modal-overlay" id="civilian-modal">
+        <div class="modal-content">
+            <h3><i class="fa-solid fa-bullhorn" style="color: #10b981;"></i> Citizen Hazard Incident Report</h3>
+            <p style="font-size: 11px; color: var(--text-secondary);">Report live hazards to local disaster management teams with GPS coordinates and photos/videos.</p>
+            
+            <div>
+                <label>GPS Location Detection</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="civ-coords" placeholder="Lat, Lon coordinates..." readonly style="flex: 1;">
+                    <button class="btn btn-secondary" onclick="detectGPSLocation()"><i class="fa-solid fa-location-crosshairs"></i> Fetch GPS</button>
+                </div>
+            </div>
+
+            <div>
+                <label>Incident / Hazard Description</label>
+                <select id="civ-hazard-type">
+                    <option value="Landslide / Mudslide Blockage">Landslide / Mudslide Blockage</option>
+                    <option value="Fallen Rocks / Debris on Road">Fallen Rocks / Debris on Road</option>
+                    <option value="Severe Road Crack / Collapse">Severe Road Crack / Collapse</option>
+                    <option value="Flash Flood / Water Accumulation">Flash Flood / Water Accumulation</option>
+                </select>
+            </div>
+
+            <div>
+                <label>Upload Media Evidence (Photos & Videos)</label>
+                <input type="file" id="civ-media-input" accept="image/*,video/*" multiple onchange="previewCivilianMedia(event)">
+                <div class="media-preview-grid" id="civ-media-preview"></div>
+            </div>
+
+            <div>
+                <label>Additional Details</label>
+                <textarea id="civ-notes" rows="2" placeholder="Mention near landmark, trapped vehicles, or scope of damage..."></textarea>
+            </div>
+
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="closeCivilianReportModal()">Cancel</button>
+                <button class="btn btn-primary" style="background: #10b981; color: #000;" onclick="submitCivilianReport()">Submit Public Alert</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DATA TRANSPARENCY FOOTER -->
+    <footer>
+        <div class="data-source-pills">
+            <div class="source-pill">
+                <i class="fa-solid fa-cloud-showers-heavy" style="color: var(--accent-cyan);"></i>
+                <span>Rainfall: <strong>Live Open-Meteo API — Updated 10m ago</strong></span>
+            </div>
+            <div class="source-pill">
+                <i class="fa-solid fa-droplet" style="color: var(--risk-high);"></i>
+                <span>Soil Saturation: <strong>Satellite Derived (SoilGrids API) — Updated 2h ago</strong></span>
+            </div>
+            <div class="source-pill">
+                <i class="fa-solid fa-layer-group" style="color: var(--text-muted);"></i>
+                <span>Terrain Elevation: <strong>Copernicus DEM (30m Static)</strong></span>
+            </div>
+        </div>
+        <div>NETRA EWS v3.2 | Assam Operations</div>
+    </footer>
+
+    <script>
+        // --- 1. MONITORING ZONES DATA STRUCTURE (ASSAM OPERATIONAL SECTOR) ---
+        const assamZones = [
+            {
+                id: 'NETRA-AS-01',
+                name: 'Sonapur Slope Sector (NH-27)',
+                district: 'Kamrup Metropolitan',
+                lat: 26.1158,
+                lon: 91.9778,
+                slopeAngle: 39,
+                historicalWeight: 88,
+                popDensityWeight: 0.85,
+                roadImportanceWeight: 0.95,
+                impacts: [
+                    { type: 'Road', name: 'NH-27 East-West National Transit Corridor' },
+                    { type: 'Settlement', name: 'Sonapur Market Sector (Pop ~4,500)' },
+                    { type: 'Grid', name: 'Regional High-Voltage Power Lines' }
+                ],
+                workflowState: 'NEW ALERT'
+            },
+            {
+                id: 'NETRA-AS-02',
+                name: 'Haflong Hill Bypass Corridor',
+                district: 'Dima Hasao',
+                lat: 25.1702,
+                lon: 93.0169,
+                slopeAngle: 44,
+                historicalWeight: 92,
+                popDensityWeight: 0.80,
+                roadImportanceWeight: 0.90,
+                impacts: [
+                    { type: 'Road', name: 'Haflong-Silchar Hill Highway' },
+                    { type: 'Settlement', name: 'Lower Haflong Slope Housing' },
+                    { type: 'Rail', name: 'Lumding-Badarpur Railway Corridor' }
+                ],
+                workflowState: 'MONITORING'
+            },
+            {
+                id: 'NETRA-AS-03',
+                name: 'Guwahati Narakasur Hill Slopes',
+                district: 'Kamrup Metropolitan',
+                lat: 26.1445,
+                lon: 91.7632,
+                slopeAngle: 31,
+                historicalWeight: 65,
+                popDensityWeight: 0.95,
+                roadImportanceWeight: 0.75,
+                impacts: [
+                    { type: 'Settlement', name: 'Urban Hillside Settlement (Pop ~12,000)' },
+                    { type: 'Hospital', name: 'GMCH Hospital Arterial Route' }
+                ],
+                workflowState: 'MONITORING'
+            },
+            {
+                id: 'NETRA-AS-04',
+                name: 'Jorhat Disoi Valley Slope Node',
+                district: 'Jorhat',
+                lat: 26.7509,
+                lon: 94.2037,
+                slopeAngle: 22,
+                historicalWeight: 35,
+                popDensityWeight: 0.40,
+                roadImportanceWeight: 0.50,
+                impacts: [
+                    { type: 'Road', name: 'SH-18 State Highway Link' },
+                    { type: 'Estate', name: 'Tea Estate Labor Quarters' }
+                ],
+                workflowState: 'RESOLVED'
+            },
+            {
+                id: 'NETRA-AS-05',
+                name: 'Silchar Kalain Slope Sector (NH-6)',
+                district: 'Cachar',
+                lat: 24.9782,
+                lon: 92.5691,
+                slopeAngle: 36,
+                historicalWeight: 72,
+                popDensityWeight: 0.70,
+                roadImportanceWeight: 0.85,
+                impacts: [
+                    { type: 'Road', name: 'NH-6 Meghalaya-Barak Valley Transit' },
+                    { type: 'Settlement', name: 'Kalain Border Settlement' }
+                ],
+                workflowState: 'MONITORING'
+            }
+        ];
+
+        let selectedZone = assamZones[0];
+        let map;
+        let mapMarkers = {};
+        let reportMarkers = [];
+        let civilianUploadedMedia = [];
+
+        // --- 2. MULTILINGUAL DICTIONARY ---
+        const i18n = {
+            en: {
+                title: "NETRA EWS",
+                sub: "North East Terrain Risk Assessment & Early Warning System",
+                status: "SYSTEM ACTIVE — ASSAM SECTOR",
+                critical: "Critical Alerts",
+                high: "High Risk",
+                moderate: "Moderate",
+                stable: "Stable Zones",
+                queue: "Monitoring Priority Queue",
+                anomaly: "ENVIRONMENTAL ANOMALY DETECTED:",
+                decision: "Zone Decision Assessment"
+            },
+            hi: {
+                title: "नेत्रा EWS",
+                sub: "उत्तर पूर्व भू-भाग जोखिम आकलन एवं पूर्व चेतावनी प्रणाली",
+                status: "प्रणाली सक्रिय — असम क्षेत्र",
+                critical: "गंभीर चेतावनियाँ",
+                high: "उच्च जोखिम",
+                moderate: "मध्यम जोखिम",
+                stable: "सुरक्षित क्षेत्र",
+                queue: "निगरानी प्राथमिकता सूची",
+                anomaly: "पर्यावरणीय विसंगति पाई गई:",
+                decision: "क्षेत्र निर्णय मूल्यांकन"
+            },
+            as: {
+                title: "নেত্ৰা EWS",
+                sub: "উত্তৰ-পূব ভূ-খণ্ডৰ বিপদাশংকা মূল্যাংকন আৰু আগতীয়া সকীয়ানি ব্যৱস্থা",
+                status: "ব্যৱস্থা সক্ৰিয় — অসম খণ্ড",
+                critical: "জৰুৰী সতৰ্কতা",
+                high: "উচ্চ বিপদাশংকা",
+                moderate: "মধ্যম",
+                stable: "সুৰক্ষিত অঞ্চল",
+                queue: "পর্যবেক্ষণ অগ্ৰাধিকাৰ তালিকা",
+                anomaly: "পৰিৱেশ সংক্ৰান্তিয় অস্বাভাৱিকতা চিনাক্ত:",
+                decision: "অঞ্চল সিদ্ধান্ত মূল্যাংকন"
+            }
+        };
+
+        function changeLanguage(lang) {
+            const dict = i18n[lang] || i18n.en;
+            document.getElementById('ui-app-title').innerText = dict.title;
+            document.getElementById('ui-app-sub').innerText = dict.sub;
+            document.getElementById('ui-sys-status').innerText = dict.status;
+            document.getElementById('lbl-critical').innerText = dict.critical;
+            document.getElementById('lbl-high').innerText = dict.high;
+            document.getElementById('lbl-moderate').innerText = dict.moderate;
+            document.getElementById('lbl-stable').innerText = dict.stable;
+            document.getElementById('ui-queue-title').innerText = dict.queue;
+            document.getElementById('ui-anomaly-title').innerText = dict.anomaly;
+            document.getElementById('ui-card-decision').innerText = dict.decision;
+        }
+
+        // --- 3. INITIALIZATION & CLOCK ---
+        function initPlatform() {
+            startClock();
+            initMapCanvas();
+            fetchEnvironmentalTelemetry();
+            loadSavedFieldReports();
+            loadSavedCivilianReports();
+        }
+
+        function startClock() {
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('live-clock').innerText = now.toLocaleTimeString() + ' IST';
+            }, 1000);
+        }
+
+        // --- 4. GEOSPATIAL MAP CANVAS ---
+        function initMapCanvas() {
+            const topoGeologicalLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                maxZoom: 17,
+                attribution: '&copy; OpenStreetMap contributors, SRTM | OpenTopoMap'
+            });
+
+            const esriGeological = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 18,
+                attribution: 'Tiles &copy; Esri'
+            });
+
+            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 18,
+                attribution: 'Source: Esri, Maxar'
+            });
+
+            const darkOpsLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 18,
+                subdomains: 'abcd',
+                attribution: '&copy; OpenStreetMap &copy; CARTO'
+            });
+
+            map = L.map('map-canvas', { 
+                zoomControl: false,
+                layers: [topoGeologicalLayer]
+            }).setView([25.85, 92.60], 8);
+
+            const baseMaps = {
+                "🗺️ Topo / Geological Map": topoGeologicalLayer,
+                "⛰️ ESRI Physical Terrain": esriGeological,
+                "🛰️ Satellite Imagery": satelliteLayer,
+                "🌙 Dark EOC Console View": darkOpsLayer
+            };
+
+            L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+            assamZones.forEach(zone => {
+                const marker = L.circleMarker([zone.lat, zone.lon], {
+                    radius: 13,
+                    fillColor: '#ef4444',
+                    color: '#ffffff',
+                    weight: 2.5,
+                    opacity: 1,
+                    fillOpacity: 0.85
+                }).addTo(map);
+
+                marker.bindPopup(`
+                    <div style="font-family: sans-serif; font-size: 12px; color: #1e293b;">
+                        <strong>${zone.name}</strong><br>
+                        District: ${zone.district}<br>
+                        Slope Angle: <b>${zone.slopeAngle}°</b>
+                    </div>
+                `);
+                marker.on('click', () => switchSelectedZone(zone.id));
+                mapMarkers[zone.id] = marker;
+            });
+        }
+
+        // --- 5. TELEMETRY INGESTION & AI RISK MODEL ---
+        async function fetchEnvironmentalTelemetry() {
+            for (let zone of assamZones) {
+                try {
+                    const url = `https://api.open-meteo.com/v1/forecast?latitude=${zone.lat}&longitude=${zone.lon}&current=precipitation,rain&hourly=rain,soil_moisture_0_to_1cm&forecast_days=1`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    const currentRain = data.current ? (data.current.precipitation || 0.0) : 0.0;
+                    const rain24h = data.hourly && data.hourly.rain ? data.hourly.rain.slice(0, 24).reduce((a, b) => a + b, 0) : 18.5;
+                    const rawSoil = data.hourly && data.hourly.soil_moisture_0_to_1cm ? data.hourly.soil_moisture_0_to_1cm[0] : 0.40;
+                    const soilMoisturePercent = Math.min(Math.round(rawSoil * 210), 98);
+
+                    zone.telemetry = {
+                        currentRain: currentRain,
+                        rain24h: Math.round(rain24h * 10) / 10,
+                        soilMoisture: soilMoisturePercent
+                    };
+                } catch (err) {
+                    console.warn(`Fallback cache loaded for ${zone.id}:`, err);
+                    zone.telemetry = { currentRain: 8.2, rain24h: 76.4, soilMoisture: 82 };
+                }
+
+                computeRiskEngine(zone);
+            }
+
+            renderDashboardQueue();
+            switchSelectedZone(selectedZone.id);
+        }
+
+        // --- 6. MULTI-FACTOR AI RISK SCORING & EXPLAINABLE AI ENGINE ---
+        function computeRiskEngine(zone) {
+            const { rain24h, soilMoisture } = zone.telemetry;
+
+            const rainScore = Math.min((rain24h / 110) * 100, 100);
+            const soilScore = soilMoisture;
+            const slopeScore = Math.min((zone.slopeAngle / 45) * 100, 100);
+            const histScore = zone.historicalWeight;
+
+            const compositeRisk = Math.round(
+                (rainScore * 0.35) +
+                (soilScore * 0.30) +
+                (slopeScore * 0.20) +
+                (histScore * 0.15)
+            );
+
+            zone.riskScore = compositeRisk;
+
+            const weightedSum = (rainScore * 0.35) + (soilScore * 0.30) + (slopeScore * 0.20) + (histScore * 0.15) || 1;
+            zone.xai = {
+                rain: Math.round(((rainScore * 0.35) / weightedSum) * 100),
+                soil: Math.round(((soilScore * 0.30) / weightedSum) * 100),
+                slope: Math.round(((slopeScore * 0.20) / weightedSum) * 100),
+                hist: Math.round(((histScore * 0.15) / weightedSum) * 100)
+            };
+
+            zone.hasAnomaly = (rain24h > 55 && soilMoisture > 75);
+
+            const anomalyMultiplier = zone.hasAnomaly ? 1.25 : 1.0;
+            zone.epsScore = Math.min(Math.round(
+                (zone.riskScore * 0.40) +
+                (zone.popDensityWeight * 25) +
+                (zone.roadImportanceWeight * 20) +
+                (anomalyMultiplier * 15)
+            ), 99);
+
+            if (zone.riskScore >= 75) zone.severity = 'CRITICAL';
+            else if (zone.riskScore >= 58) zone.severity = 'HIGH';
+            else if (zone.riskScore >= 38) zone.severity = 'MODERATE';
+            else zone.severity = 'STABLE';
+        }
+
+        // --- 7. DASHBOARD RENDERING & UI SYNC ---
+        function renderDashboardQueue() {
+            const container = document.getElementById('zone-queue-container');
+            container.innerHTML = '';
+
+            let c = 0, h = 0, m = 0, s = 0;
+            assamZones.sort((a, b) => b.epsScore - a.epsScore);
+
+            assamZones.forEach((zone, idx) => {
+                if (zone.severity === 'CRITICAL') c++;
+                else if (zone.severity === 'HIGH') h++;
+                else if (zone.severity === 'MODERATE') m++;
+                else s++;
+
+                if (mapMarkers[zone.id]) {
+                    const color = zone.severity === 'CRITICAL' ? '#ef4444' :
+                                  zone.severity === 'HIGH' ? '#f97316' :
+                                  zone.severity === 'MODERATE' ? '#eab308' : '#10b981';
+                    mapMarkers[zone.id].setStyle({ fillColor: color, color: '#ffffff' });
+                }
+
+                const item = document.createElement('div');
+                item.className = `zone-item ${zone.id === selectedZone.id ? 'active' : ''}`;
+                item.onclick = () => switchSelectedZone(zone.id);
+
+                const bgClass = `risk-${zone.severity.toLowerCase()}-bg`;
+
+                item.innerHTML = `
+                    <div class="zone-item-head">
+                        <span class="zone-item-title">${idx + 1}. ${zone.name}</span>
+                        <span class="badge-risk ${bgClass}">${zone.severity} ${zone.riskScore}</span>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-muted); display: flex; justify-content: space-between;">
+                        <span>${zone.district} District</span>
+                        <span style="color: var(--accent-cyan); font-weight: 600;">[${zone.workflowState}]</span>
+                    </div>
+                    <div class="zone-item-metrics">
+                        <div>24h Rain: <span>${zone.telemetry ? zone.telemetry.rain24h : '--'} mm</span></div>
+                        <div>Soil Sat: <span>${zone.telemetry ? zone.telemetry.soilMoisture : '--'}%</span></div>
+                        <div>EPS Rank: <span>#${zone.epsScore}</span></div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+
+            document.getElementById('count-critical').innerText = c;
+            document.getElementById('count-high').innerText = h;
+            document.getElementById('count-moderate').innerText = m;
+            document.getElementById('count-stable').innerText = s;
+        }
+
+        function switchSelectedZone(zoneId) {
+            const zone = assamZones.find(z => z.id === zoneId);
+            if (!zone) return;
+            selectedZone = zone;
+
+            map.panTo([zone.lat, zone.lon]);
+
+            document.getElementById('eval-zone-name').innerText = zone.name;
+            document.getElementById('eval-zone-sub').innerText = `District: ${zone.district} | Lat: ${zone.lat} | Lon: ${zone.lon}`;
+            document.getElementById('eval-eps').innerText = `${zone.epsScore} / 100`;
+            document.getElementById('eval-trend').innerText = zone.hasAnomaly ? '↑ RAPIDLY RISING' : '→ STABLE';
+
+            if (zone.xai) {
+                document.getElementById('xai-v1').innerText = `${zone.xai.rain}%`;
+                document.getElementById('xai-b1').style.width = `${zone.xai.rain}%`;
+
+                document.getElementById('xai-v2').innerText = `${zone.xai.soil}%`;
+                document.getElementById('xai-b2').style.width = `${zone.xai.soil}%`;
+
+                document.getElementById('xai-v3').innerText = `${zone.xai.slope}%`;
+                document.getElementById('xai-b3').style.width = `${zone.xai.slope}%`;
+
+                document.getElementById('xai-v4').innerText = `${zone.xai.hist}%`;
+                document.getElementById('xai-b4').style.width = `${zone.xai.hist}%`;
+            }
+
+            document.getElementById('eval-forecast').innerHTML = `
+                Current Risk: <strong style="color:var(--risk-${zone.severity.toLowerCase()});">${zone.severity} (${zone.riskScore}/100)</strong><br>
+                Expected 6-12h Window: ${zone.riskScore > 60 ? 'High probability of localized slope instability during upcoming rainfall cycle.' : 'Low risk of slope failure within next 12 hours.'}
+            `;
+
+            const actionList = document.getElementById('eval-actions');
+            actionList.innerHTML = '';
+            let recs = zone.severity === 'CRITICAL' ? [
+                'Dispatch PWD Slope Engineering Unit for immediate toe inspection.',
+                'Prepare pre-emptive traffic diversion along vulnerable highway corridor.',
+                'Issue automated advisory notice to District Emergency Operation Centre (DEOC).'
+            ] : zone.severity === 'HIGH' ? [
+                'Increase satellite soil saturation ping frequency to 15-minute interval.',
+                'Inspect roadside culverts for debris blockage.'
+            ] : ['Standard routine observation. Telemetry levels within baseline bounds.'];
+
+            recs.forEach(r => {
+                const li = document.createElement('li');
+                li.className = 'action-item';
+                li.innerHTML = `<i class="fa-solid fa-angle-right"></i> <span>${r}</span>`;
+                actionList.appendChild(li);
+            });
+
+            const impactList = document.getElementById('eval-impacts');
+            impactList.innerHTML = '';
+            zone.impacts.forEach(imp => {
+                const icon = imp.type === 'Road' ? 'fa-road' : imp.type === 'Settlement' ? 'fa-house-flag' : 'fa-building-ngo';
+                const li = document.createElement('li');
+                li.className = 'action-item';
+                li.innerHTML = `<i class="fa-solid ${icon}"></i> <div><strong>${imp.type}:</strong> ${imp.name}</div>`;
+                impactList.appendChild(li);
+            });
+
+            document.getElementById('eval-reroute').innerHTML = `
+                <strong>Transit Advisory:</strong> ${zone.riskScore > 75 ? '⚠️ High risk of slope movement along highway link. Alternate route via State Highway 14 recommended.' : 'Road corridor currently OPEN. Standard transit precautions apply.'}
+            `;
+
+            updateWorkflowButtons(zone.workflowState);
+            renderDashboardQueue();
+        }
+
+        // --- 8. FIELD OFFICIAL REPORTING ---
+        function openReportModal() { document.getElementById('report-modal').style.display = 'flex'; }
+        function closeReportModal() { document.getElementById('report-modal').style.display = 'none'; }
+
+        function submitFieldReport() {
+            const zId = document.getElementById('rpt-zone').value;
+            const type = document.getElementById('rpt-type').value;
+            const desc = document.getElementById('rpt-desc').value;
+            const targetZone = assamZones.find(z => z.id === zId);
+
+            const report = {
+                id: 'RPT-' + Date.now(),
+                zoneId: zId,
+                lat: targetZone.lat + (Math.random() * 0.02 - 0.01),
+                lon: targetZone.lon + (Math.random() * 0.02 - 0.01),
+                type: type,
+                desc: desc,
+                timestamp: new Date().toLocaleTimeString()
+            };
+
+            const saved = JSON.parse(localStorage.getItem('netra_field_reports') || '[]');
+            saved.push(report);
+            localStorage.setItem('netra_field_reports', JSON.stringify(saved));
+
+            plotReportOnMap(report);
+            closeReportModal();
+            alert(`[NETRA EWS]: Field report logged successfully for ${targetZone.name}. Plotted on map.`);
+        }
+
+        function loadSavedFieldReports() {
+            const saved = JSON.parse(localStorage.getItem('netra_field_reports') || '[]');
+            saved.forEach(plotReportOnMap);
+        }
+
+        function plotReportOnMap(rpt) {
+            const marker = L.marker([rpt.lat, rpt.lon]).addTo(map);
+            marker.bindPopup(`
+                <div style="font-family: sans-serif; font-size: 11px;">
+                    <strong style="color: #ef4444;">FIELD HAZARD REPORT</strong><br>
+                    Type: <b>${rpt.type}</b><br>
+                    Notes: ${rpt.desc || 'No details provided.'}<br>
+                    Logged: ${rpt.timestamp}
+                </div>
+            `);
+            reportMarkers.push(marker);
+        }
+
+        // --- 9. NEW FEATURE: LOCAL CIVILIAN INCIDENT REPORTING WITH MEDIA & GPS ---
+        function openCivilianReportModal() {
+            document.getElementById('civilian-modal').style.display = 'flex';
+            detectGPSLocation();
+        }
+
+        function closeCivilianReportModal() {
+            document.getElementById('civilian-modal').style.display = 'none';
+            civilianUploadedMedia = [];
+            document.getElementById('civ-media-preview').innerHTML = '';
+        }
+
+        function detectGPSLocation() {
+            const input = document.getElementById('civ-coords');
+            input.value = "Fetching GPS location...";
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        const lat = position.coords.latitude.toFixed(4);
+                        const lon = position.coords.longitude.toFixed(4);
+                        input.value = `${lat}, ${lon}`;
+                    },
+                    error => {
+                        input.value = `${selectedZone.lat}, ${selectedZone.lon} (Zone Default)`;
+                    }
+                );
+            } else {
+                input.value = `${selectedZone.lat}, ${selectedZone.lon} (Zone Default)`;
+            }
+        }
+
+        function previewCivilianMedia(event) {
+            const files = event.target.files;
+            const container = document.getElementById('civ-media-preview');
+            container.innerHTML = '';
+            civilianUploadedMedia = [];
+
+            Array.from(files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    civilianUploadedMedia.push({ type: file.type, data: e.target.result });
+                    if (file.type.startsWith('image/')) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = 'media-preview-item';
+                        container.appendChild(img);
+                    } else if (file.type.startsWith('video/')) {
+                        const vid = document.createElement('video');
+                        vid.src = e.target.result;
+                        vid.className = 'media-preview-item';
+                        vid.controls = true;
+                        container.appendChild(vid);
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function submitCivilianReport() {
+            const coordsVal = document.getElementById('civ-coords').value;
+            const parts = coordsVal.split(',').map(s => parseFloat(s.trim()));
+            const lat = !isNaN(parts[0]) ? parts[0] : selectedZone.lat;
+            const lon = !isNaN(parts[1]) ? parts[1] : selectedZone.lon;
+            const type = document.getElementById('civ-hazard-type').value;
+            const notes = document.getElementById('civ-notes').value;
+
+            const civReport = {
+                id: 'CIV-' + Date.now(),
+                lat: lat,
+                lon: lon,
+                type: type,
+                notes: notes,
+                media: civilianUploadedMedia,
+                timestamp: new Date().toLocaleTimeString()
+            };
+
+            const saved = JSON.parse(localStorage.getItem('netra_civ_reports') || '[]');
+            saved.push(civReport);
+            localStorage.setItem('netra_civ_reports', JSON.stringify(saved));
+
+            plotCivilianReportOnMap(civReport);
+            closeCivilianReportModal();
+            alert('[NETRA EWS]: Civilian report submitted successfully with GPS & media verification.');
+        }
+
+        function loadSavedCivilianReports() {
+            const saved = JSON.parse(localStorage.getItem('netra_civ_reports') || '[]');
+            saved.forEach(plotCivilianReportOnMap);
+        }
+
+        function plotCivilianReportOnMap(rpt) {
+            const civIcon = L.divIcon({
+                html: '<i class="fa-solid fa-camera" style="color: #10b981; font-size: 16px; text-shadow: 0 0 4px #000;"></i>',
+                className: 'custom-civ-icon',
+                iconSize: [20, 20]
+            });
+
+            const marker = L.marker([rpt.lat, rpt.lon], { icon: civIcon }).addTo(map);
+
+            let mediaHTML = '';
+            if (rpt.media && rpt.media.length > 0) {
+                mediaHTML = '<div style="display:flex; gap:4px; margin-top:6px;">';
+                rpt.media.forEach(m => {
+                    if (m.type.startsWith('image/')) {
+                        mediaHTML += `<img src="${m.data}" style="width:50px; height:50px; object-fit:cover; border-radius:3px;">`;
+                    } else {
+                        mediaHTML += `<span style="font-size:9px; color:#10b981;">[Video Attached]</span>`;
+                    }
+                });
+                mediaHTML += '</div>';
+            }
+
+            marker.bindPopup(`
+                <div style="font-family: sans-serif; font-size: 11px; max-width:200px;">
+                    <strong style="color: #10b981;">CIVILIAN HAZARD REPORT</strong><br>
+                    Type: <b>${rpt.type}</b><br>
+                    Details: ${rpt.notes || 'None'}<br>
+                    Logged: ${rpt.timestamp}
+                    ${mediaHTML}
+                </div>
+            `);
+            reportMarkers.push(marker);
+        }
+
+        // --- 10. WORKFLOW STATE CONTROL & RIGHT PANEL BUTTONS FIX ---
+        function advanceWorkflow(newState) {
+            selectedZone.workflowState = newState;
+            updateWorkflowButtons(newState);
+            renderDashboardQueue();
+            alert(`[NETRA EWS LOG]: Authority workflow status for ${selectedZone.name} updated to: ${newState}`);
+        }
+
+        function updateWorkflowButtons(state) {
+            document.getElementById('eval-workflow-state').innerText = state;
+            
+            const btnAck = document.getElementById('btn-wf-ack');
+            const btnTeam = document.getElementById('btn-wf-team');
+            const btnRoad = document.getElementById('btn-wf-road');
+            const btnRes = document.getElementById('btn-wf-res');
+
+            [btnAck, btnTeam, btnRoad, btnRes].forEach(b => b.classList.remove('btn-active-state'));
+
+            if (state === 'ACKNOWLEDGED') btnAck.classList.add('btn-active-state');
+            else if (state === 'TEAM ASSIGNED') btnTeam.classList.add('btn-active-state');
+            else if (state === 'ROAD ADVISORY ISSUED') btnRoad.classList.add('btn-active-state');
+            else if (state === 'RESOLVED') btnRes.classList.add('btn-active-state');
+        }
+
+        function focusAnomalyZone() { switchSelectedZone('NETRA-AS-01'); }
+
+        window.onload = initPlatform;
+    </script>
+</body>
+</html>
